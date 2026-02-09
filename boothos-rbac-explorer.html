@@ -1,0 +1,1479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BoothOS RBAC Explorer v3 — Auth Flows + RBAC</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #242736;
+    --surface3: #2e3245;
+    --border: #353849;
+    --text: #e4e6ef;
+    --text-dim: #8b8fa7;
+    --text-muted: #5d6178;
+    --superadmin: #f43f5e;
+    --vendor: #8b5cf6;
+    --staff: #3b82f6;
+    --customer: #10b981;
+    --guest: #f59e0b;
+    --comment: #f59e0b;
+    --radius: 10px;
+    --active-color: var(--staff);
+  }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+  }
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  .header {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .header .sep { color: var(--text-muted); }
+  .header .hint { color: var(--text-dim); font-size: 12px; margin-left: auto; }
+  .header .hint kbd { background: var(--surface3); border: 1px solid var(--border); padding: 1px 6px; border-radius: 4px; font-size: 10px; font-family: inherit; }
+  .logo { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, var(--vendor), var(--staff)); display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 700; }
+
+  .main { display: flex; flex: 1; min-height: 0; }
+
+  /* Left panel */
+  .panel-left {
+    width: 270px;
+    min-width: 270px;
+    border-right: 1px solid var(--border);
+    background: var(--surface);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .panel-section { padding: 14px; }
+  .panel-section + .panel-section { border-top: 1px solid var(--border); }
+  .panel-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.2px; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; }
+
+  .persona-card {
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    margin-bottom: 6px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--surface2);
+  }
+  .persona-card:hover { border-color: var(--text-muted); }
+  .persona-card.active { border-color: var(--active-color); background: color-mix(in srgb, var(--active-color) 8%, var(--surface2)); }
+  .persona-icon {
+    width: 32px; height: 32px; border-radius: 7px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 16px; flex-shrink: 0;
+  }
+  .persona-card .info { flex: 1; min-width: 0; }
+  .persona-card .name { font-size: 12.5px; font-weight: 600; }
+  .persona-card .desc { font-size: 10px; color: var(--text-dim); margin-top: 1px; }
+  .persona-card .identity-badge {
+    font-size: 8.5px; padding: 2px 6px; border-radius: 3px;
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    display: inline-block; margin-top: 3px;
+  }
+
+  .subrole-btn {
+    display: block; width: 100%; text-align: left;
+    padding: 7px 10px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 11.5px; cursor: pointer;
+    margin-bottom: 4px; transition: all 0.15s; font-family: inherit;
+  }
+  .subrole-btn:hover { border-color: var(--staff); }
+  .subrole-btn.active { border-color: var(--staff); background: color-mix(in srgb, var(--staff) 12%, var(--surface2)); color: #93bbfc; }
+
+  /* Platform toggle */
+  .platform-toggle {
+    display: flex; gap: 4px; margin-bottom: 8px;
+  }
+  .platform-btn {
+    flex: 1; padding: 6px 8px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text-dim); font-size: 10px; cursor: pointer;
+    font-family: inherit; text-align: center; transition: all 0.15s;
+    font-weight: 500;
+  }
+  .platform-btn:hover { border-color: var(--text-muted); }
+  .platform-btn.active { border-color: var(--active-color); color: var(--text); background: color-mix(in srgb, var(--active-color) 10%, var(--surface2)); }
+  .platform-btn .platform-icon { font-size: 14px; display: block; margin-bottom: 2px; }
+
+  /* Center */
+  .panel-center { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--bg); position: relative; }
+  .flow-area { flex: 1; position: relative; overflow: hidden; }
+  .flow-svg { width: 100%; height: 100%; display: block; }
+
+  .node-group { cursor: pointer; }
+  .node-group:hover .node-rect { filter: brightness(1.2); }
+  .node-group:hover .node-label { fill: #fff; }
+  .comment-badge { cursor: pointer; }
+
+  /* Right panel */
+  .panel-right {
+    width: 310px; min-width: 310px;
+    border-left: 1px solid var(--border);
+    background: var(--surface);
+    display: flex; flex-direction: column;
+    overflow-y: auto;
+  }
+  .detail-card { padding: 14px; border-bottom: 1px solid var(--border); }
+  .detail-card h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); margin-bottom: 8px; font-weight: 600; }
+  .app-badge {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 10px; border-radius: 5px; font-size: 11px; font-weight: 500;
+    background: var(--surface3); border: 1px solid var(--border);
+    margin-bottom: 3px; margin-right: 3px;
+  }
+  .app-badge .dot { width: 5px; height: 5px; border-radius: 50%; }
+  .gate-box {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 8px 12px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    font-size: 11px; color: var(--text-dim); line-height: 1.5;
+  }
+  .gate-box code { color: var(--active-color); }
+
+  .identity-card {
+    background: var(--surface2); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .identity-card .ic-label { font-size: 10px; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+  .identity-card .ic-row { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-dim); padding: 2px 0; }
+  .identity-card .ic-row .ic-key { color: var(--text-muted); min-width: 70px; }
+  .identity-card .ic-row .ic-val { color: var(--text); font-family: 'SF Mono', monospace; font-size: 10.5px; }
+
+  .perm-list { list-style: none; }
+  .perm-item {
+    padding: 3px 0; font-size: 11px;
+    display: flex; align-items: center; gap: 7px; color: var(--text-dim);
+  }
+  .perm-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+  .perm-item.granted { color: var(--text); }
+  .perm-item.granted .perm-dot { background: #34d399; }
+  .perm-item.denied .perm-dot { background: #4b4e63; }
+
+  .screen-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+  .screen-tag {
+    padding: 3px 8px; border-radius: 4px; font-size: 10px;
+    background: var(--surface3); border: 1px solid var(--border); color: var(--text-dim);
+  }
+  .screen-tag.visible { color: var(--text); border-color: var(--active-color); background: color-mix(in srgb, var(--active-color) 10%, var(--surface3)); }
+
+  .device-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 500;
+    background: var(--surface3); border: 1px solid var(--border); color: var(--text);
+  }
+  .device-badge .device-icon { font-size: 12px; }
+
+  /* Comments section */
+  .comment-list { display: flex; flex-direction: column; gap: 6px; }
+  .comment-card {
+    background: var(--surface2); border: 1px solid color-mix(in srgb, var(--comment) 25%, var(--border));
+    border-radius: 6px; padding: 10px 12px; position: relative;
+  }
+  .comment-card .comment-target { font-size: 10px; font-weight: 600; color: var(--comment); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .comment-card .comment-text { font-size: 12px; color: var(--text-dim); line-height: 1.5; }
+  .comment-card .comment-del {
+    position: absolute; top: 8px; right: 8px;
+    background: none; border: none; color: var(--text-muted); cursor: pointer;
+    font-size: 14px; padding: 0 4px; line-height: 1; opacity: 0; transition: opacity 0.15s;
+  }
+  .comment-card:hover .comment-del { opacity: 1; }
+  .comment-card .comment-del:hover { color: var(--superadmin); }
+  .no-comments { font-size: 11px; color: var(--text-muted); font-style: italic; }
+
+  /* Prompt */
+  .prompt-area {
+    border-top: 1px solid var(--border);
+    background: var(--surface); padding: 14px 20px;
+    flex-shrink: 0;
+  }
+  .prompt-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+  .prompt-header h3 { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); font-weight: 600; }
+  .copy-btn {
+    padding: 4px 12px; border-radius: 5px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text); font-size: 10px; cursor: pointer;
+    font-family: inherit; font-weight: 500; transition: all 0.15s;
+  }
+  .copy-btn:hover { background: var(--surface3); border-color: var(--text-muted); }
+  .prompt-text {
+    font-size: 11.5px; line-height: 1.65; color: var(--text-dim);
+    max-height: 100px; overflow-y: auto; white-space: pre-wrap;
+  }
+
+  /* Comment modal */
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000; backdrop-filter: blur(4px);
+    opacity: 0; pointer-events: none; transition: opacity 0.2s;
+  }
+  .modal-overlay.open { opacity: 1; pointer-events: all; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 24px; width: 440px; max-width: 90vw;
+    transform: translateY(10px); transition: transform 0.2s;
+  }
+  .modal-overlay.open .modal { transform: translateY(0); }
+  .modal h2 { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .modal .modal-sub { font-size: 11px; color: var(--text-dim); margin-bottom: 16px; }
+  .modal textarea {
+    width: 100%; min-height: 100px; padding: 10px 12px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface2); color: var(--text);
+    font-family: inherit; font-size: 13px; line-height: 1.5;
+    resize: vertical; outline: none; transition: border-color 0.15s;
+  }
+  .modal textarea:focus { border-color: var(--active-color); }
+  .modal textarea::placeholder { color: var(--text-muted); }
+  .modal-actions { display: flex; gap: 8px; margin-top: 14px; justify-content: flex-end; }
+  .modal-actions button {
+    padding: 7px 18px; border-radius: 6px; font-family: inherit;
+    font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-cancel { background: var(--surface2); border: 1px solid var(--border); color: var(--text); }
+  .btn-cancel:hover { background: var(--surface3); }
+  .btn-save { background: var(--active-color); border: 1px solid transparent; color: #fff; }
+  .btn-save:hover { filter: brightness(1.15); }
+
+  /* View tabs */
+  .view-tab {
+    padding: 5px 14px; border-radius: 6px;
+    border: 1px solid var(--border); background: var(--surface2);
+    color: var(--text-dim); font-size: 11px; cursor: pointer;
+    font-family: inherit; font-weight: 600; transition: all 0.15s;
+  }
+  .view-tab:hover { border-color: var(--text-muted); color: var(--text); }
+  .view-tab.active { border-color: var(--vendor); color: #fff; background: color-mix(in srgb, var(--vendor) 20%, var(--surface2)); }
+
+  /* Flows view */
+  .flows-view { display: none; flex: 1; min-height: 0; overflow-y: auto; padding: 32px; }
+  .flows-view.visible { display: block; }
+  .flows-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); gap: 24px; max-width: 1400px; margin: 0 auto; }
+  .flow-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 14px;
+    padding: 24px; transition: border-color 0.2s;
+  }
+  .flow-card:hover { border-color: var(--text-muted); }
+  .flow-card-header { display: flex; align-items: center; gap: 12px; margin-bottom: 20px; }
+  .flow-card-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+  .flow-card-title { font-size: 16px; font-weight: 700; letter-spacing: -0.3px; }
+  .flow-card-desc { font-size: 12px; color: var(--text-dim); margin-top: 2px; }
+  .flow-steps { display: flex; flex-direction: column; gap: 0; }
+  .flow-step {
+    display: flex; align-items: flex-start; gap: 14px; padding: 10px 0;
+    position: relative;
+  }
+  .flow-step::before {
+    content: ''; position: absolute; left: 15px; top: 36px; bottom: -10px;
+    width: 2px; background: var(--border);
+  }
+  .flow-step:last-child::before { display: none; }
+  .step-num {
+    width: 32px; height: 32px; border-radius: 8px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 700; color: #fff;
+    position: relative; z-index: 1;
+  }
+  .step-content { flex: 1; padding-top: 4px; }
+  .step-label { font-size: 13px; font-weight: 600; color: var(--text); }
+  .step-detail { font-size: 11px; color: var(--text-dim); margin-top: 2px; line-height: 1.5; }
+  .step-badge {
+    display: inline-block; padding: 2px 8px; border-radius: 4px;
+    font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    margin-top: 4px;
+  }
+  .flow-decision {
+    background: color-mix(in srgb, var(--guest) 8%, var(--surface));
+    border: 1px dashed color-mix(in srgb, var(--guest) 40%, var(--border));
+    border-radius: 8px; padding: 10px 14px; margin: 6px 0 6px 46px;
+    font-size: 11px; color: var(--text-dim); line-height: 1.5;
+  }
+  .flow-decision strong { color: var(--guest); }
+  .flows-section-title {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px;
+    color: var(--text-muted); font-weight: 700; margin-bottom: 16px;
+    padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  }
+  .flows-section { margin-bottom: 32px; }
+  .arch-note {
+    background: color-mix(in srgb, var(--vendor) 6%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--vendor) 20%, var(--border));
+    border-radius: 10px; padding: 16px 20px; margin-bottom: 28px;
+    max-width: 1400px; margin-left: auto; margin-right: auto;
+  }
+  .arch-note-title { font-size: 12px; font-weight: 700; color: var(--vendor); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.8px; }
+  .arch-note-text { font-size: 12px; color: var(--text-dim); line-height: 1.7; }
+  .arch-note-text strong { color: var(--text); }
+
+  @keyframes flow-dash { to { stroke-dashoffset: -20; } }
+  .flow-animated { animation: flow-dash 1s linear infinite; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .fade-in { animation: fadeIn 0.25s ease forwards; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <div class="logo">B</div>
+    <h1>BoothOS RBAC Explorer</h1>
+    <span class="sep">|</span>
+    <span style="color:var(--text-dim);font-size:12px;">Dual Identity Pools + Conditional Rendering Auth</span>
+    <div style="display:flex;gap:4px;margin-left:12px;">
+      <button class="view-tab" data-view="rbac" onclick="switchView('rbac')">RBAC Explorer</button>
+      <button class="view-tab active" data-view="flows" onclick="switchView('flows')">App Flows</button>
+    </div>
+    <span class="hint">Click any node to add a comment</span>
+  </div>
+  <div class="main">
+    <div class="panel-left">
+      <div class="panel-section">
+        <div class="panel-label">Identity Pool: Users (Business)</div>
+        <div id="persona-list-users"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">Identity Pool: Customers</div>
+        <div id="persona-list-customers"></div>
+      </div>
+      <div class="panel-section">
+        <div class="panel-label">No Identity (Guest)</div>
+        <div id="persona-list-guest"></div>
+      </div>
+      <div class="panel-section" id="subrole-section" style="display:none;">
+        <div class="panel-label">Staff Sub-Role</div>
+        <div id="subrole-list"></div>
+      </div>
+      <div class="panel-section" id="platform-section" style="display:none;">
+        <div class="panel-label">Platform / Device</div>
+        <div class="platform-toggle" id="platform-toggle"></div>
+      </div>
+    </div>
+
+    <div class="panel-center">
+      <div class="flow-area">
+        <svg class="flow-svg" id="flow-svg"></svg>
+      </div>
+      <div class="prompt-area">
+        <div class="prompt-header">
+          <h3>Prompt Output</h3>
+          <button class="copy-btn" onclick="copyPrompt()">Copy</button>
+        </div>
+        <div class="prompt-text" id="prompt-output"></div>
+      </div>
+    </div>
+
+    <div class="panel-right" id="details-panel"></div>
+  </div>
+  <!-- App Flows View (non-technical) -->
+  <div class="flows-view" id="flows-view"></div>
+</div>
+
+<!-- Comment modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h2 id="modal-title">Comment</h2>
+    <div class="modal-sub" id="modal-sub"></div>
+    <textarea id="modal-textarea" placeholder="Ask a question, suggest a change, or flag an issue about this step..."></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+      <button class="btn-save" onclick="saveComment()">Save Comment</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// DATA
+// ============================================================
+const PERSONAS = [
+  // IDENTITY POOL: users (business) - mutually exclusive roles
+  { id: 'superadmin', pool: 'users', name: 'Super Admin', desc: 'BoothOS platform team', icon: '\u{1f6e1}', color: '#f43f5e', badge: 'Platform',
+    identityTable: 'users',
+    identityNote: 'isSuperAdmin: true | Cannot be vendor or staff',
+    platforms: ['web', 'mobile'],
+    platformLabels: { web: 'super-admin :3002', mobile: 'Mobile App (Admin view)' },
+    devices: { web: 'Desktop / Laptop', mobile: 'iOS / Android' },
+    app: [{ name: 'super-admin', port: 3002 }, { name: 'mobile-app', port: null }],
+    gate: 'users.isSuperAdmin === true',
+    gateNote: 'No vendor context \u2014 operates at platform level',
+    authMethods: ['Email + Password', 'Google OAuth', 'Apple Sign-In'],
+    jwtType: 'Business JWT',
+    jwtPayload: '{ userId, isSuperAdmin: true, role: null, vendorId: null }',
+    screens: ['Platform Overview','All Vendors','Subscriptions','Revenue','Analytics','User Management','Plan Control','Billing Monitor'],
+    permLabels: ['Platform Overview','Vendor Management','Subscription Control','Revenue Monitoring','User Management','System Settings'],
+  },
+  { id: 'vendor', pool: 'users', name: 'Vendor / Owner', desc: 'Booth business owner', icon: '\u{1f3aa}', color: '#8b5cf6', badge: 'Business',
+    identityTable: 'users',
+    identityNote: 'vendor_memberships.isOwner | Cannot be super admin or staff',
+    platforms: ['web', 'mobile'],
+    platformLabels: { web: 'web-dashboard :3000', mobile: 'Mobile App (Owner view)' },
+    devices: { web: 'Desktop / Laptop', mobile: 'iOS / Android' },
+    app: [{ name: 'web-dashboard', port: 3000 }, { name: 'mobile-app', port: null }],
+    gate: 'vendor_memberships.isOwner === true',
+    gateNote: 'Owner bypass — all permissions granted. Mobile: conditional rendering switches to (tabs) group after login.',
+    authMethods: ['Email + Password', 'Google OAuth', 'Apple Sign-In'],
+    jwtType: 'Business JWT',
+    jwtPayload: '{ userId, vendorId, role: "owner", perms: ["*"] }',
+    screens: ['Dashboard','Bookings','Events','Leads / CRM','Staff','Analytics','Settings','Services','Packages','Templates','Website Builder','Billing','Inventory','Contracts','Invoices','Support Tickets'],
+    permLabels: ['dashboard.view','bookings.*','events.*','customers.*','leads.*','inventory.*','staff.*','templates.*','settings.*','reports.*','support.*','website.*'],
+  },
+  { id: 'staff', pool: 'users', name: 'Staff', desc: 'Works for vendor(s)', icon: '\u{1f9d1}\u200d\u{1f4bc}', color: '#3b82f6', badge: 'Scoped',
+    identityTable: 'users',
+    identityNote: 'vendor_memberships.roleId | Cannot be super admin or vendor',
+    platforms: ['web', 'mobile'],
+    platformLabels: { web: 'web-dashboard :3000', mobile: 'Mobile App (Staff view)' },
+    devices: { web: 'Desktop / Laptop', mobile: 'iOS / Android (especially for Attendants)' },
+    app: [{ name: 'web-dashboard', port: 3000 }, { name: 'mobile-app', port: null }],
+    gate: 'vendor_memberships.roleId \u2192 role.permissions[]',
+    gateNote: 'Multi-vendor staff sees vendor picker (conditional rendering). Zero-memberships guard blocks access to tabs.',
+    authMethods: ['Email + Password', 'Google OAuth', 'Apple Sign-In'],
+    jwtType: 'Business JWT',
+    jwtPayload: '{ userId, vendorId, role: "<subrole>", perms: [...] }',
+    screens: [], permLabels: [],
+  },
+  // IDENTITY POOL: customers (separate table, per-vendor scoped)
+  { id: 'customer', pool: 'customers', name: 'Customer', desc: 'Books events from vendor', icon: '\u{1f389}', color: '#10b981', badge: 'Client',
+    identityTable: 'customers',
+    identityNote: 'Separate identity pool | Per-vendor scoped | Can become vendor (new users record)',
+    platforms: ['web-portal', 'web-app', 'mobile'],
+    platformLabels: { 'web-portal': 'Portal (no account)', 'web-app': 'web-booking :3001 (with account)', mobile: 'Mobile App (Customer view)' },
+    devices: { 'web-portal': 'Any device (link access)', 'web-app': 'Desktop / Mobile browser', mobile: 'iOS / Android' },
+    app: [{ name: 'web-booking', port: 3001 }, { name: 'mobile-app', port: null }],
+    gate: 'portal_tokens.token (no-login) OR customers table auth',
+    gateNote: 'TWO access modes: portal link (no account) or customer login (app)',
+    authMethods: ['Portal Token (no login)', 'Email + Password', 'Google OAuth', 'Apple Sign-In'],
+    jwtType: 'Customer JWT (separate from business JWT)',
+    jwtPayload: '{ customerId, vendorId, type: "customer" }',
+    screens: ['View Booking','Pay Balance','Sign Contract','Choose Template','Add Extras','View Gallery','Download Photos','Support Tickets','Booking History'],
+    permLabels: ['canViewBooking','canMakePayment','canSignContract','canSelectTemplate','canAddExtras','canViewGallery','canDownloadPhotos'],
+  },
+  // NO IDENTITY (no auth, no account)
+  { id: 'guest', pool: 'none', name: 'Event Guest', desc: 'Uses staff\'s iPad at event', icon: '\u{1f4f8}', color: '#f59e0b', badge: 'No auth',
+    identityTable: 'none',
+    identityNote: 'No account, no auth | Uses staff\'s iPad in Event Lock Mode',
+    platforms: ['ipad'],
+    platformLabels: { ipad: 'Staff\'s iPad (locked capture mode)' },
+    devices: { ipad: 'Staff\'s iPad (Event Lock Mode)' },
+    app: [{ name: 'mobile-app', port: null, note: 'Event Lock Mode' }],
+    gate: 'None \u2014 locked capture screen on staff device',
+    gateNote: 'Zero authentication \u2014 staff enters Event Lock Mode, guest interacts with locked screen',
+    authMethods: [],
+    jwtType: 'None (inherits staff session context)',
+    jwtPayload: 'N/A \u2014 uses event session from staff\'s locked device',
+    screens: ['Tap to Start','Capture Photo','Apply Filters','Add Props','Print','Share (QR/SMS/Email/AirDrop)'],
+    permLabels: [],
+  }
+];
+
+const STAFF_ROLES = [
+  { id: 'admin', name: 'Admin', perms: ['dashboard.view','bookings.*','events.*','staff.*','reports.*','customers.*','leads.*','inventory.*','templates.*','settings.general'],
+    screens: ['Dashboard','Bookings','Events','Leads / CRM','Staff','Analytics','Settings (General)','Inventory','Templates','Customers'] },
+  { id: 'attendant', name: 'Attendant', perms: ['events.view','events.capture'],
+    screens: ['Assigned Events','Job Sheets','Checklists','Capture Mode'] },
+  { id: 'template_designer', name: 'Template Designer', perms: ['templates.view','templates.edit'],
+    screens: ['Templates','Digital Props','Filter Presets'] },
+  { id: 'accountant', name: 'Accountant', perms: ['reports.view','reports.export','bookings.view'],
+    screens: ['Financial Reports','Invoices','Payments','Booking List (Read-only)'] },
+  { id: 'ops_manager', name: 'Operations Manager', perms: ['events.*','staff.view','inventory.*','dashboard.view'],
+    screens: ['Dashboard','Events','Staff Schedule','Inventory','Checklists'] },
+  { id: 'custom', name: 'Custom Role', perms: ['vendor-defined'],
+    screens: ['Vendor-defined screens'] }
+];
+
+const ALL_PERMS = [
+  'dashboard.view','bookings.view','bookings.create','bookings.edit','bookings.delete',
+  'events.view','events.manage','events.capture',
+  'customers.view','customers.edit','leads.view','leads.edit',
+  'inventory.view','inventory.manage','staff.view','staff.invite','staff.manage',
+  'templates.view','templates.edit','settings.general','settings.billing','settings.integrations',
+  'reports.view','reports.export','support.view','support.manage','website.view','website.edit'
+];
+
+// ============================================================
+// STATE
+// ============================================================
+const state = {
+  persona: 'superadmin',
+  staffRole: 'admin',
+  platform: 'web',          // web | mobile | web-portal | web-app | ipad
+  comments: [],
+  modalNode: null,
+  editingCommentId: null,
+};
+
+// ============================================================
+// FLOW DEFINITIONS
+// ============================================================
+const VB_W = 960, VB_H = 600;
+
+function getFlowData() {
+  const cx = VB_W / 2;
+  const N = (id, label, sub, x, y, w, h, tier) => ({ id, label, sub: sub || '', x, y, w: w || 160, h: h || 44, tier: tier || 'main' });
+
+  const persona = state.persona;
+  const platform = state.platform;
+
+  // --- SUPER ADMIN ---
+  if (persona === 'superadmin') {
+    if (platform === 'mobile') {
+      const nodes = [
+        N('open','Open Mobile App','iOS / Android', cx, 35, 200, 44),
+        N('login','Login','Email / Google / Apple', cx, 110, 200, 44),
+        N('resolve','POST /auth/login','Returns user + memberships', cx, 185, 260, 44),
+        N('found','Found in users table','isSuperAdmin === true', cx, 260, 240, 44),
+        N('jwt','Issue Business JWT','{ userId, isSuperAdmin: true }', cx, 335, 260, 44),
+        N('render','Conditional Rendering','Root layout → show (tabs) group', cx, 410, 260, 44),
+        N('home','Admin Home','Mobile admin dashboard', cx, 490, 200, 52, 'app'),
+        N('s1','All Vendors','', 180, 570, 130, 38, 'screen'),
+        N('s2','Subscriptions','', 370, 570, 130, 38, 'screen'),
+        N('s3','Revenue','', 560, 570, 120, 38, 'screen'),
+        N('s4','Analytics','', 730, 570, 120, 38, 'screen'),
+      ];
+      const edges = [
+        { from: 'open', to: 'login' },
+        { from: 'login', to: 'resolve' },
+        { from: 'resolve', to: 'found' },
+        { from: 'found', to: 'jwt' },
+        { from: 'jwt', to: 'render' },
+        { from: 'render', to: 'home' },
+        { from: 'home', to: 's1' }, { from: 'home', to: 's2' }, { from: 'home', to: 's3' }, { from: 'home', to: 's4' },
+      ];
+      return { nodes, edges };
+    }
+    // Web flow
+    const nodes = [
+      N('open','Open super-admin :3002','Desktop browser', cx, 40, 260, 44),
+      N('login','Login','Email / Google / Apple', cx, 125, 200, 44),
+      N('check','Check isSuperAdmin','users.isSuperAdmin === true', cx, 210, 250, 44),
+      N('jwt','Issue Business JWT','{ userId, isSuperAdmin: true }', cx, 295, 260, 44),
+      N('app','Platform Dashboard','super-admin :3002', cx, 395, 220, 52, 'app'),
+      N('s1','All Vendors','', 140, 510, 130, 38, 'screen'),
+      N('s2','Subscriptions','', 310, 510, 130, 38, 'screen'),
+      N('s3','Revenue','', 480, 510, 120, 38, 'screen'),
+      N('s4','Analytics','', 640, 510, 120, 38, 'screen'),
+      N('s5','User Mgmt','', 800, 510, 120, 38, 'screen'),
+    ];
+    const edges = [
+      { from: 'open', to: 'login' },
+      { from: 'login', to: 'check' },
+      { from: 'check', to: 'jwt', label: 'true' },
+      { from: 'jwt', to: 'app' },
+      { from: 'app', to: 's1' }, { from: 'app', to: 's2' }, { from: 'app', to: 's3' }, { from: 'app', to: 's4' }, { from: 'app', to: 's5' },
+    ];
+    return { nodes, edges };
+  }
+
+  // --- VENDOR / OWNER ---
+  if (persona === 'vendor') {
+    if (platform === 'mobile') {
+      const nodes = [
+        N('open','Open Mobile App','iOS / Android', cx, 35, 200, 44),
+        N('login','Login','Email / Google / Apple', cx, 110, 200, 44),
+        N('resolve','POST /auth/login','Returns user + memberships', cx, 185, 260, 44),
+        N('found','Found in users table','vendor_memberships.isOwner', cx, 260, 250, 44),
+        N('auto','Auto-Select (Owner)','Single vendor auto-selected', cx, 335, 240, 44),
+        N('render','Conditional Rendering','Root layout → show (tabs) group', cx, 410, 260, 44),
+        N('app','Owner Dashboard','Mobile business view', cx, 490, 210, 52, 'app'),
+        N('s1','Bookings','', 130, 570, 110, 38, 'screen'),
+        N('s2','Events','', 280, 570, 110, 38, 'screen'),
+        N('s3','Staff','', 430, 570, 110, 38, 'screen'),
+        N('s4','Analytics','', 580, 570, 110, 38, 'screen'),
+        N('s5','Settings','', 730, 570, 110, 38, 'screen'),
+      ];
+      const edges = [
+        { from: 'open', to: 'login' },
+        { from: 'login', to: 'resolve' },
+        { from: 'resolve', to: 'found' },
+        { from: 'found', to: 'auto' },
+        { from: 'auto', to: 'render' },
+        { from: 'render', to: 'app' },
+        { from: 'app', to: 's1' }, { from: 'app', to: 's2' }, { from: 'app', to: 's3' }, { from: 'app', to: 's4' }, { from: 'app', to: 's5' },
+      ];
+      return { nodes, edges };
+    }
+    // Web
+    const nodes = [
+      N('open','Open web-dashboard :3000','Desktop browser', cx, 40, 260, 44),
+      N('login','Login','Email / Google / Apple', cx, 125, 200, 44),
+      N('fetch','Fetch Memberships','vendor_memberships.isOwner', cx, 210, 250, 44),
+      N('jwt','Issue Scoped JWT','{ userId, vendorId, perms: [*] }', cx, 295, 260, 44),
+      N('app','Full Business Dashboard','web-dashboard :3000', cx, 395, 240, 52, 'app'),
+      N('s1','Bookings','', 80, 510, 110, 38, 'screen'),
+      N('s2','Events','', 215, 510, 110, 38, 'screen'),
+      N('s3','Leads / CRM','', 350, 510, 110, 38, 'screen'),
+      N('s4','Staff','', 485, 510, 110, 38, 'screen'),
+      N('s5','Analytics','', 620, 510, 110, 38, 'screen'),
+      N('s6','Settings','', 755, 510, 110, 38, 'screen'),
+    ];
+    const edges = [
+      { from: 'open', to: 'login' },
+      { from: 'login', to: 'fetch' },
+      { from: 'fetch', to: 'jwt', label: 'owner' },
+      { from: 'jwt', to: 'app' },
+      { from: 'app', to: 's1' }, { from: 'app', to: 's2' }, { from: 'app', to: 's3' },
+      { from: 'app', to: 's4' }, { from: 'app', to: 's5' }, { from: 'app', to: 's6' },
+    ];
+    return { nodes, edges };
+  }
+
+  // --- STAFF ---
+  if (persona === 'staff') {
+    const role = STAFF_ROLES.find(r => r.id === state.staffRole);
+    const scs = role.screens.slice(0, 5);
+    const count = scs.length;
+    const totalW = count * 145;
+    const startX = cx - totalW / 2 + 70;
+    const screenNodes = scs.map((s, i) => N('s' + i, s, '', startX + i * 145, 555, 130, 38, 'screen'));
+
+    if (platform === 'mobile') {
+      const nodes = [
+        N('open','Open Mobile App','iOS / Android', cx, 30, 200, 44),
+        N('login','Login','Email / Google / Apple', cx, 100, 200, 44),
+        N('resolve','POST /auth/login','Returns user + memberships', cx, 170, 260, 44),
+        N('found','Found in users table','vendor_memberships[]', cx, 240, 240, 44),
+        N('multi','Multiple Vendors?','memberships.length > 1', cx, 310, 210, 44, 'decision'),
+        N('picker','Vendor Picker Screen','Conditional rendering → Auth group', cx - 170, 385, 220, 44),
+        N('auto','Auto-Select Vendor','Single vendor → store set', cx + 170, 385, 210, 44),
+        N('render','Root Layout Re-renders','Conditional: show (tabs) group', cx, 455, 260, 44),
+        N('jwt','Scoped JWT','role: ' + role.name, cx, 520, 200, 44),
+        ...screenNodes.map(s => ({ ...s, y: 585 })),
+      ];
+      const edges = [
+        { from: 'open', to: 'login' },
+        { from: 'login', to: 'resolve' },
+        { from: 'resolve', to: 'found' },
+        { from: 'found', to: 'multi' },
+        { from: 'multi', to: 'picker', label: 'yes' },
+        { from: 'multi', to: 'auto', label: 'no' },
+        { from: 'picker', to: 'render' },
+        { from: 'auto', to: 'render' },
+        { from: 'render', to: 'jwt' },
+        ...screenNodes.map(sn => ({ from: 'jwt', to: sn.id })),
+      ];
+      return { nodes, edges };
+    }
+    // Web
+    const nodes = [
+      N('open','Open web-dashboard :3000','Desktop browser', cx, 35, 260, 44),
+      N('login','Login','Email / Google / Apple', cx, 110, 200, 44),
+      N('fetch','Fetch Memberships','vendor_memberships[]', cx, 185, 230, 44),
+      N('multi','Multiple Vendors?','memberships.length > 1', cx, 265, 210, 44, 'decision'),
+      N('picker','Vendor Picker','Select workspace', cx - 175, 350, 165, 44),
+      N('auto','Auto-Select','Single vendor', cx + 175, 350, 160, 44),
+      N('jwt','Scoped JWT','role: ' + role.name, cx, 430, 200, 44),
+      N('app','web-dashboard',role.name + ' View', cx, 500, 200, 52, 'app'),
+      ...screenNodes,
+    ];
+    const edges = [
+      { from: 'open', to: 'login' },
+      { from: 'login', to: 'fetch' },
+      { from: 'fetch', to: 'multi' },
+      { from: 'multi', to: 'picker', label: 'yes' },
+      { from: 'multi', to: 'auto', label: 'no' },
+      { from: 'picker', to: 'jwt' },
+      { from: 'auto', to: 'jwt' },
+      { from: 'jwt', to: 'app' },
+      ...screenNodes.map(sn => ({ from: 'app', to: sn.id })),
+    ];
+    return { nodes, edges };
+  }
+
+  // --- CUSTOMER ---
+  if (persona === 'customer') {
+    // Portal flow (no account, link access)
+    if (platform === 'web-portal') {
+      const nodes = [
+        N('link','Receives Link','SMS / Email from vendor', cx, 45, 210, 44),
+        N('url','Opens Portal URL','/{clientSlug}/portal/{token}', cx, 130, 270, 44),
+        N('validate','Validate Token','portal_tokens lookup', cx, 215, 210, 44),
+        N('scope','Token Scopes','booking-specific permissions', cx, 305, 230, 44),
+        N('portal','Client Portal','Booking-scoped access (no account)', cx, 400, 280, 52, 'app'),
+        N('s1','View Booking','', 100, 510, 130, 38, 'screen'),
+        N('s2','Pay Balance','', 260, 510, 120, 38, 'screen'),
+        N('s3','Sign Contract','', 410, 510, 130, 38, 'screen'),
+        N('s4','Choose Template','', 570, 510, 140, 38, 'screen'),
+        N('s5','View Gallery','', 740, 510, 120, 38, 'screen'),
+      ];
+      const edges = [
+        { from: 'link', to: 'url' },
+        { from: 'url', to: 'validate' },
+        { from: 'validate', to: 'scope', label: 'valid' },
+        { from: 'scope', to: 'portal' },
+        { from: 'portal', to: 's1' }, { from: 'portal', to: 's2' }, { from: 'portal', to: 's3' },
+        { from: 'portal', to: 's4' }, { from: 'portal', to: 's5' },
+      ];
+      return { nodes, edges };
+    }
+    // Web app (with account)
+    if (platform === 'web-app') {
+      const nodes = [
+        N('open','Open web-booking :3001','Desktop / mobile browser', cx, 40, 260, 44),
+        N('login','Login / Register','Email / Google / Apple', cx, 125, 230, 44),
+        N('resolve','POST /auth/customer/login','customers table lookup', cx, 210, 260, 44),
+        N('jwt','Issue Customer JWT','{ customerId, vendorId, type: "customer" }', cx, 295, 290, 44),
+        N('app','Customer Dashboard','web-booking :3001', cx, 395, 220, 52, 'app'),
+        N('s1','Booking History','', 130, 510, 140, 38, 'screen'),
+        N('s2','Active Bookings','', 310, 510, 140, 38, 'screen'),
+        N('s3','Galleries','', 490, 510, 120, 38, 'screen'),
+        N('s4','Support','', 650, 510, 120, 38, 'screen'),
+        N('s5','Profile','', 810, 510, 110, 38, 'screen'),
+      ];
+      const edges = [
+        { from: 'open', to: 'login' },
+        { from: 'login', to: 'resolve' },
+        { from: 'resolve', to: 'jwt' },
+        { from: 'jwt', to: 'app' },
+        { from: 'app', to: 's1' }, { from: 'app', to: 's2' }, { from: 'app', to: 's3' },
+        { from: 'app', to: 's4' }, { from: 'app', to: 's5' },
+      ];
+      return { nodes, edges };
+    }
+    // Mobile app
+    const nodes = [
+      N('open','Open Mobile App','iOS / Android', cx, 35, 200, 44),
+      N('login','Login','Email / Google / Apple', cx, 110, 200, 44),
+      N('resolve','POST /auth/resolve','Check users + customers tables', cx, 190, 260, 44),
+      N('dual','Found in BOTH tables?','Same Google/Apple ID', cx, 275, 240, 44, 'decision'),
+      N('picker','Identity Picker','"Continue as Customer" / "Continue as [Business Role]"', cx, 370, 340, 44, 'decision'),
+      N('custjwt','Issue Customer JWT','{ customerId, type: "customer" }', cx - 175, 455, 250, 44),
+      N('bizjwt','Issue Business JWT','{ userId, vendorId, role }', cx + 175, 455, 240, 44),
+      N('custapp','Customer View','Bookings, galleries, support', cx - 175, 545, 210, 52, 'app'),
+      N('bizapp','Business View','Dashboard, events, staff...', cx + 175, 545, 210, 52, 'app'),
+    ];
+    const edges = [
+      { from: 'open', to: 'login' },
+      { from: 'login', to: 'resolve' },
+      { from: 'resolve', to: 'dual' },
+      { from: 'dual', to: 'picker', label: 'both' },
+      { from: 'dual', to: 'custjwt', label: 'customer only' },
+      { from: 'picker', to: 'custjwt', label: 'customer' },
+      { from: 'picker', to: 'bizjwt', label: 'business' },
+      { from: 'custjwt', to: 'custapp' },
+      { from: 'bizjwt', to: 'bizapp' },
+    ];
+    return { nodes, edges };
+  }
+
+  // --- GUEST ---
+  const nodes = [
+    N('staff','Staff Enters Lock Mode','On their iPad', cx, 40, 240, 44),
+    N('lock','Event Lock Mode Active','iPad locked to capture UI', cx, 130, 260, 44),
+    N('hand','Hands iPad to Guest','Guest has NO account', cx, 220, 240, 44),
+    N('tap','Tap to Start','Session created', cx, 315, 180, 44),
+    N('capture','Capture','Photo / GIF / Video / Burst', cx, 405, 230, 52, 'app'),
+    N('s1','Apply Filters','', 130, 520, 130, 40, 'screen'),
+    N('s2','Add Props','', 305, 520, 120, 40, 'screen'),
+    N('s3','Print','', 470, 520, 110, 40, 'screen'),
+    N('s4','Share','QR / SMS / Email / AirDrop', 660, 520, 170, 44, 'screen'),
+  ];
+  const edges = [
+    { from: 'staff', to: 'lock' },
+    { from: 'lock', to: 'hand' },
+    { from: 'hand', to: 'tap' },
+    { from: 'tap', to: 'capture' },
+    { from: 'capture', to: 's1' }, { from: 'capture', to: 's2' }, { from: 'capture', to: 's3' }, { from: 'capture', to: 's4' },
+  ];
+  return { nodes, edges };
+}
+
+// ============================================================
+// RENDER
+// ============================================================
+function renderPersonas() {
+  const usersEl = document.getElementById('persona-list-users');
+  const custEl = document.getElementById('persona-list-customers');
+  const guestEl = document.getElementById('persona-list-guest');
+
+  const renderCard = (p) => {
+    const active = state.persona === p.id;
+    const cc = getCommentsForPersona(p.id).length;
+    const poolColors = { users: '#3b82f6', customers: '#10b981', none: '#f59e0b' };
+    const poolLabels = { users: 'users table', customers: 'customers table', none: 'no identity' };
+    const poolColor = poolColors[p.pool];
+    return `<div class="persona-card ${active ? 'active' : ''}" onclick="selectPersona('${p.id}')" style="${active ? `--active-color:${p.color}` : ''}">
+      <div class="persona-icon" style="background:color-mix(in srgb,${p.color} 18%,var(--surface2));color:${p.color}">${p.icon}</div>
+      <div class="info">
+        <div class="name">${p.name}${cc ? ` <span style="color:var(--comment);font-size:10px;font-weight:400">(${cc})</span>` : ''}</div>
+        <div class="desc">${p.desc}</div>
+        <span class="identity-badge" style="background:color-mix(in srgb,${poolColor} 15%,var(--surface3));color:${poolColor};border:1px solid color-mix(in srgb,${poolColor} 30%,var(--border))">${poolLabels[p.pool]}</span>
+      </div>
+    </div>`;
+  };
+
+  usersEl.innerHTML = PERSONAS.filter(p => p.pool === 'users').map(renderCard).join('');
+  custEl.innerHTML = PERSONAS.filter(p => p.pool === 'customers').map(renderCard).join('');
+  guestEl.innerHTML = PERSONAS.filter(p => p.pool === 'none').map(renderCard).join('');
+}
+
+function renderSubRoles() {
+  const section = document.getElementById('subrole-section');
+  if (state.persona !== 'staff') { section.style.display = 'none'; return; }
+  section.style.display = '';
+  document.getElementById('subrole-list').innerHTML = STAFF_ROLES.map(r =>
+    `<button class="subrole-btn ${state.staffRole === r.id ? 'active' : ''}" onclick="selectSubRole('${r.id}')">${r.name}</button>`
+  ).join('');
+}
+
+function renderPlatformToggle() {
+  const section = document.getElementById('platform-section');
+  const p = PERSONAS.find(x => x.id === state.persona);
+  if (!p.platforms || p.platforms.length <= 1) { section.style.display = 'none'; return; }
+  section.style.display = '';
+
+  const icons = { web: '\u{1f5a5}', mobile: '\u{1f4f1}', 'web-portal': '\u{1f517}', 'web-app': '\u{1f310}', ipad: '\u{1f4f1}' };
+  const labels = { web: 'Web', mobile: 'Mobile', 'web-portal': 'Portal Link', 'web-app': 'Web App', ipad: 'iPad' };
+
+  document.getElementById('platform-toggle').innerHTML = p.platforms.map(pl =>
+    `<button class="platform-btn ${state.platform === pl ? 'active' : ''}" onclick="selectPlatform('${pl}')">
+      <span class="platform-icon">${icons[pl] || ''}</span>${labels[pl] || pl}
+    </button>`
+  ).join('');
+}
+
+function renderDetails() {
+  const p = PERSONAS.find(x => x.id === state.persona);
+  const isStaff = state.persona === 'staff';
+  const role = isStaff ? STAFF_ROLES.find(r => r.id === state.staffRole) : null;
+  const screens = isStaff ? role.screens : p.screens;
+  const permLabels = isStaff ? role.perms : p.permLabels;
+  document.documentElement.style.setProperty('--active-color', p.color);
+
+  let h = '';
+
+  // Identity pool info
+  const poolColors = { users: '#3b82f6', customers: '#10b981', none: '#f59e0b' };
+  h += `<div class="detail-card fade-in"><h3>Identity</h3>
+    <div class="identity-card">
+      <div class="ic-label" style="color:${poolColors[p.pool]}">
+        ${p.pool === 'users' ? 'Users Table (Business)' : p.pool === 'customers' ? 'Customers Table (Client)' : 'No Identity Pool'}
+      </div>
+      <div class="ic-row"><span class="ic-key">Table:</span><span class="ic-val">${p.identityTable}</span></div>
+      <div class="ic-row"><span class="ic-key">JWT:</span><span class="ic-val">${p.jwtType}</span></div>
+      <div class="ic-row" style="margin-top:4px;font-size:10px;color:var(--text-muted)">${p.identityNote}</div>
+    </div>
+  </div>`;
+
+  // App + Device
+  h += `<div class="detail-card fade-in"><h3>Application &amp; Device</h3>
+    ${p.app.map(a => `<span class="app-badge"><span class="dot" style="background:${p.color}"></span>${a.name}${a.port ? ` <span style="color:var(--text-muted)">:${a.port}</span>` : ''}${a.note ? ` <span style="color:var(--text-muted);font-size:9px">(${a.note})</span>` : ''}</span>`).join('')}
+    <div style="margin-top:8px">
+      <span class="device-badge"><span class="device-icon">${state.platform === 'mobile' || state.platform === 'ipad' ? '\u{1f4f1}' : '\u{1f5a5}'}</span>${p.devices[state.platform] || 'Any device'}</span>
+    </div>
+  </div>`;
+
+  // Auth methods
+  if (p.authMethods.length > 0) {
+    h += `<div class="detail-card fade-in"><h3>Auth Methods</h3>
+      <div style="display:flex;flex-wrap:wrap;gap:4px">
+        ${p.authMethods.map(m => {
+          const isOAuth = m.includes('Google') || m.includes('Apple');
+          const isPortal = m.includes('Portal');
+          const bg = isOAuth ? 'color-mix(in srgb, #8b5cf6 12%, var(--surface3))' : isPortal ? 'color-mix(in srgb, #10b981 12%, var(--surface3))' : 'var(--surface3)';
+          const bc = isOAuth ? 'color-mix(in srgb, #8b5cf6 30%, var(--border))' : isPortal ? 'color-mix(in srgb, #10b981 30%, var(--border))' : 'var(--border)';
+          return `<span class="screen-tag" style="background:${bg};border-color:${bc};color:var(--text)">${m}</span>`;
+        }).join('')}
+      </div>
+      <div style="margin-top:6px;font-size:10px;color:var(--text-muted)">Account linking: same email merges Google + Apple + email/password into one record. authProviders: string[]</div>
+    </div>`;
+  }
+
+  // Gate
+  h += `<div class="detail-card fade-in"><h3>Access Gate</h3>
+    <div class="gate-box"><code>${p.gate}</code><br><span style="font-size:10px;color:var(--text-muted)">${p.gateNote}</span></div>
+  </div>`;
+
+  // JWT Payload
+  h += `<div class="detail-card fade-in"><h3>JWT Payload</h3>
+    <div class="gate-box"><code>${p.jwtPayload}</code></div>
+  </div>`;
+
+  // Screens
+  h += `<div class="detail-card fade-in"><h3>Visible Screens (${screens.length})</h3>
+    <div class="screen-grid">${screens.map(s => `<span class="screen-tag visible">${s}</span>`).join('')}</div>
+  </div>`;
+
+  // Permissions
+  if (state.persona === 'staff') {
+    h += `<div class="detail-card fade-in"><h3>Permissions</h3><ul class="perm-list">`;
+    ALL_PERMS.forEach(perm => {
+      const granted = role.perms.some(rp => {
+        if (rp === 'vendor-defined') return false;
+        if (rp.endsWith('.*')) return perm.startsWith(rp.replace('.*',''));
+        return rp === perm;
+      });
+      h += `<li class="perm-item ${granted?'granted':'denied'}"><span class="perm-dot"></span>${perm}</li>`;
+    });
+    if (role.id === 'custom') h += `<li class="perm-item" style="color:var(--staff);margin-top:4px;font-style:italic"><span class="perm-dot" style="background:var(--staff)"></span>Defined by vendor owner</li>`;
+    h += `</ul></div>`;
+  } else if (state.persona === 'vendor') {
+    h += `<div class="detail-card fade-in"><h3>Permissions (Owner Bypass)</h3><ul class="perm-list">${ALL_PERMS.map(perm => `<li class="perm-item granted"><span class="perm-dot"></span>${perm}</li>`).join('')}</ul></div>`;
+  } else if (permLabels.length) {
+    h += `<div class="detail-card fade-in"><h3>${state.persona==='customer'?'Portal / App Permissions':'Capabilities'}</h3><ul class="perm-list">${permLabels.map(l => `<li class="perm-item granted"><span class="perm-dot"></span>${l}</li>`).join('')}</ul></div>`;
+  }
+
+  // Conversion paths (customer only)
+  if (state.persona === 'customer') {
+    h += `<div class="detail-card fade-in"><h3>Conversion Path</h3>
+      <div style="font-size:11px;color:var(--text-dim);line-height:1.6">
+        <strong style="color:var(--text)">Customer \u2192 Vendor:</strong> Creates NEW record in <code style="color:var(--customer)">users</code> table. Same Google/Apple ID can exist in both tables. Mobile app shows identity picker.
+        <br><br>
+        <strong style="color:var(--text)">Portal \u2192 App User:</strong> Customer creates account (email/Google/Apple) on <code style="color:var(--customer)">customers</code> table. Portal tokens still work alongside.
+      </div>
+    </div>`;
+  }
+
+  // Comments for this persona
+  const comments = getCommentsForCurrentView();
+  h += `<div class="detail-card fade-in"><h3>Comments (${comments.length})</h3>`;
+  if (comments.length === 0) {
+    h += `<div class="no-comments">Click any node in the diagram to add a comment.</div>`;
+  } else {
+    h += `<div class="comment-list">${comments.map(c => `
+      <div class="comment-card">
+        <button class="comment-del" onclick="deleteComment(${c.id})" title="Delete">&times;</button>
+        <div class="comment-target">${c.nodeLabel}</div>
+        <div class="comment-text">${escHtml(c.text)}</div>
+      </div>`).join('')}</div>`;
+  }
+  h += `</div>`;
+
+  document.getElementById('details-panel').innerHTML = h;
+}
+
+function renderFlow() {
+  const svg = document.getElementById('flow-svg');
+  const p = PERSONAS.find(x => x.id === state.persona);
+  const color = p.color;
+  const { nodes, edges } = getFlowData();
+  const comments = getCommentsForCurrentView();
+  const commentedNodeIds = new Set(comments.map(c => c.nodeId));
+
+  svg.setAttribute('viewBox', `0 0 ${VB_W} ${VB_H}`);
+
+  let s = `<defs>
+    <marker id="arr" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0,8 3,0 6" fill="${color}" opacity="0.5"/></marker>
+    <marker id="arr-d" markerWidth="7" markerHeight="5" refX="6" refY="2.5" orient="auto"><polygon points="0 0,7 2.5,0 5" fill="#5d6178" opacity="0.35"/></marker>
+    <filter id="glow"><feGaussianBlur stdDeviation="3" result="blur"/><feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>`;
+
+  // Grid dots
+  for (let gx = 30; gx < VB_W; gx += 40) {
+    for (let gy = 30; gy < VB_H; gy += 40) {
+      s += `<circle cx="${gx}" cy="${gy}" r="0.6" fill="#2a2d3e" opacity="0.5"/>`;
+    }
+  }
+
+  // Platform label (top-right)
+  const platLabel = p.platformLabels ? (p.platformLabels[state.platform] || '') : '';
+  if (platLabel) {
+    s += `<text x="${VB_W - 20}" y="22" text-anchor="end" font-size="10" fill="${color}" opacity="0.6" font-family="-apple-system,system-ui,sans-serif" font-weight="600">${platLabel}</text>`;
+  }
+
+  // Identity pool badge (top-left)
+  const poolLabels = { users: 'USERS TABLE', customers: 'CUSTOMERS TABLE', none: 'NO IDENTITY' };
+  const poolColors = { users: '#3b82f6', customers: '#10b981', none: '#f59e0b' };
+  s += `<rect x="15" y="10" width="${poolLabels[p.pool].length * 7 + 16}" height="20" rx="4" fill="${poolColors[p.pool]}" opacity="0.12"/>`;
+  s += `<text x="23" y="23" font-size="9" fill="${poolColors[p.pool]}" opacity="0.8" font-family="-apple-system,system-ui,sans-serif" font-weight="700" letter-spacing="1">${poolLabels[p.pool]}</text>`;
+
+  // Edges
+  edges.forEach(e => {
+    const from = nodes.find(n => n.id === e.from);
+    const to = nodes.find(n => n.id === e.to);
+    if (!from || !to) return;
+    const isLeaf = to.tier === 'screen';
+    const x1 = from.x, y1 = from.y + from.h / 2;
+    const x2 = to.x, y2 = to.y - to.h / 2;
+    const cpOff = Math.abs(y2 - y1) * 0.45;
+    const stroke = isLeaf ? '#4b4e63' : color;
+    const op = isLeaf ? 0.3 : 0.4;
+    const sw = isLeaf ? 1 : 1.5;
+    const marker = isLeaf ? 'url(#arr-d)' : 'url(#arr)';
+    const dash = isLeaf ? '' : 'stroke-dasharray="6 4" class="flow-animated"';
+    s += `<path d="M${x1},${y1} C${x1},${y1+cpOff} ${x2},${y2-cpOff} ${x2},${y2}" fill="none" stroke="${stroke}" stroke-width="${sw}" opacity="${op}" marker-end="${marker}" ${dash}/>`;
+    if (e.label) {
+      const lx = (x1 + x2) / 2 + (x2 > x1 ? 18 : x2 < x1 ? -18 : 0);
+      const ly = (y1 + y2) / 2;
+      s += `<text x="${lx}" y="${ly}" text-anchor="middle" font-size="9.5" fill="${color}" opacity="0.65" font-family="-apple-system,system-ui,sans-serif" font-weight="600">${e.label}</text>`;
+    }
+  });
+
+  // Nodes
+  nodes.forEach(n => {
+    const x = n.x - n.w / 2;
+    const y = n.y - n.h / 2;
+    const isApp = n.tier === 'app';
+    const isScreen = n.tier === 'screen';
+    const isDecision = n.tier === 'decision';
+    const hasComment = commentedNodeIds.has(n.id);
+
+    let fill = 'var(--surface2)';
+    let stroke = 'var(--border)';
+    let sw = 1;
+    let rx = 8;
+    let labelColor = 'var(--text)';
+    let subColor = 'var(--text-dim)';
+
+    if (isApp) {
+      fill = `color-mix(in srgb, ${color} 12%, #1a1d27)`;
+      stroke = color;
+      sw = 2;
+      rx = 10;
+    } else if (isScreen) {
+      fill = 'var(--surface2)';
+      stroke = 'var(--border)';
+      sw = 1;
+      labelColor = 'var(--text-dim)';
+    } else if (isDecision) {
+      stroke = '#f59e0b';
+      sw = 1.5;
+    } else {
+      stroke = `color-mix(in srgb, ${color} 40%, var(--border))`;
+      sw = 1;
+    }
+
+    s += `<g class="node-group" onclick="openModal('${n.id}')" data-node="${n.id}">`;
+
+    if (hasComment) {
+      s += `<rect x="${x-3}" y="${y-3}" width="${n.w+6}" height="${n.h+6}" rx="${rx+2}" fill="none" stroke="var(--comment)" stroke-width="2" opacity="0.5" stroke-dasharray="4 3"/>`;
+    }
+
+    s += `<rect class="node-rect" x="${x}" y="${y}" width="${n.w}" height="${n.h}" rx="${rx}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+    s += `<text x="${n.x}" y="${n.y - (n.sub ? 5 : 0)}" text-anchor="middle" dominant-baseline="middle" class="node-label" font-size="${isScreen ? 11 : 12}" font-weight="${isApp ? 700 : 600}" fill="${labelColor}" font-family="-apple-system,system-ui,sans-serif">${n.label}</text>`;
+    if (n.sub) {
+      s += `<text x="${n.x}" y="${n.y + 11}" text-anchor="middle" dominant-baseline="middle" font-size="${isApp ? 10 : 9}" fill="${subColor}" font-family="-apple-system,system-ui,sans-serif">${n.sub}</text>`;
+    }
+
+    if (hasComment) {
+      const cc = comments.filter(c => c.nodeId === n.id).length;
+      const bx = x + n.w - 4;
+      const by = y - 4;
+      s += `<circle cx="${bx}" cy="${by}" r="8" fill="var(--comment)"/>`;
+      s += `<text x="${bx}" y="${by}" text-anchor="middle" dominant-baseline="central" font-size="9" font-weight="700" fill="#000" font-family="-apple-system,system-ui,sans-serif">${cc}</text>`;
+    }
+
+    s += `</g>`;
+  });
+
+  svg.innerHTML = s;
+}
+
+// ============================================================
+// COMMENTS
+// ============================================================
+function getCommentsForPersona(personaId) {
+  return state.comments.filter(c => c.persona === personaId);
+}
+
+function getCommentsForCurrentView() {
+  return state.comments.filter(c => {
+    if (c.persona !== state.persona) return false;
+    if (state.persona === 'staff' && c.staffRole !== state.staffRole) return false;
+    return true;
+  });
+}
+
+function openModal(nodeId) {
+  const { nodes } = getFlowData();
+  const node = nodes.find(n => n.id === nodeId);
+  if (!node) return;
+  state.modalNode = node;
+  state.editingCommentId = null;
+
+  const existing = getCommentsForCurrentView().find(c => c.nodeId === nodeId);
+  if (existing) {
+    state.editingCommentId = existing.id;
+    document.getElementById('modal-textarea').value = existing.text;
+  } else {
+    document.getElementById('modal-textarea').value = '';
+  }
+
+  document.getElementById('modal-title').textContent = node.label;
+  document.getElementById('modal-sub').textContent = node.sub || node.tier;
+  document.getElementById('modal-overlay').classList.add('open');
+  setTimeout(() => document.getElementById('modal-textarea').focus(), 100);
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  state.modalNode = null;
+  state.editingCommentId = null;
+}
+
+function saveComment() {
+  const text = document.getElementById('modal-textarea').value.trim();
+  if (!text) { closeModal(); return; }
+
+  if (state.editingCommentId !== null) {
+    const c = state.comments.find(x => x.id === state.editingCommentId);
+    if (c) c.text = text;
+  } else {
+    state.comments.push({
+      id: Date.now(),
+      persona: state.persona,
+      staffRole: state.persona === 'staff' ? state.staffRole : null,
+      platform: state.platform,
+      nodeId: state.modalNode.id,
+      nodeLabel: state.modalNode.label,
+      text,
+    });
+  }
+  closeModal();
+  updateAll();
+}
+
+function deleteComment(id) {
+  state.comments = state.comments.filter(c => c.id !== id);
+  updateAll();
+}
+
+function escHtml(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+// ============================================================
+// PROMPT
+// ============================================================
+function updatePrompt() {
+  const p = PERSONAS.find(x => x.id === state.persona);
+  const isStaff = state.persona === 'staff';
+  const role = isStaff ? STAFF_ROLES.find(r => r.id === state.staffRole) : null;
+  const comments = getCommentsForCurrentView();
+  const platLabel = p.platformLabels ? (p.platformLabels[state.platform] || state.platform) : '';
+
+  let parts = [];
+
+  // Architecture context
+  parts.push(`BoothOS uses TWO separate identity pools: "users" table (super admin, vendor, staff \u2014 mutually exclusive) and "customers" table (per-vendor scoped). Mobile app uses conditional rendering in root layout \u2014 auth state determines (auth) group or (tabs) group. No reactive useEffect navigation. Login/logout/vendor-switch update Zustand state \u2192 re-render swaps screen group. 401 interceptor auto-clears auth. Network errors preserve session. Zero-memberships guard blocks access to tabs.`);
+  parts.push('');
+
+  // Persona context
+  if (state.persona === 'superadmin') {
+    parts.push(`Reviewing: Super Admin on ${platLabel}. Identity: users table (isSuperAdmin: true). JWT: Business JWT. Auth: Email/Google/Apple. No vendor context. Screens: ${p.screens.join(', ')}.`);
+  } else if (state.persona === 'vendor') {
+    parts.push(`Reviewing: Vendor/Owner on ${platLabel}. Identity: users table (vendor_memberships.isOwner). JWT: Business JWT with vendorId. Auth: Email/Google/Apple. Owner bypass on all permissions. Screens: ${p.screens.join(', ')}.`);
+  } else if (isStaff) {
+    parts.push(`Reviewing: Staff (${role.name}) on ${platLabel}. Identity: users table (vendor_memberships.roleId). JWT: Business JWT with vendorId + scoped permissions. Auth: Email/Google/Apple. Login \u2192 fetch memberships \u2192 vendor picker if multiple \u2192 scoped JWT. Permissions: ${role.perms.join(', ')}. Screens: ${role.screens.join(', ')}.`);
+  } else if (state.persona === 'customer') {
+    if (state.platform === 'web-portal') {
+      parts.push(`Reviewing: Customer via Portal Link. NO identity/account needed. Access via /{clientSlug}/portal/{token}. Token grants booking-scoped permissions. Screens: ${p.screens.join(', ')}.`);
+    } else if (state.platform === 'web-app') {
+      parts.push(`Reviewing: Customer on Web App (web-booking :3001). Identity: customers table. JWT: Customer JWT ({ customerId, vendorId, type: "customer" }). Auth: Email/Google/Apple. Screens: Booking History, Active Bookings, Galleries, Support, Profile.`);
+    } else {
+      parts.push(`Reviewing: Customer on Mobile App. Identity: customers table. JWT: Customer JWT. Auth: Email/Google/Apple. Mobile app calls /auth/resolve \u2192 if same credentials exist in BOTH users and customers tables, shows identity picker ("Continue as Customer" or "Continue as [Business Role]"). Conversion: customer can become vendor by creating NEW users record.`);
+    }
+  } else {
+    parts.push(`Reviewing: Event Guest on staff's iPad. NO identity, NO auth. Staff enters Event Lock Mode on their iPad, hands it to guest. Guest interacts with locked capture UI. Flow: tap \u2192 capture \u2192 filter \u2192 props \u2192 print \u2192 share.`);
+  }
+
+  // Comments
+  if (comments.length > 0) {
+    parts.push('');
+    parts.push('Feedback on specific steps:');
+    comments.forEach(c => {
+      parts.push('');
+      parts.push(`**${c.nodeLabel}**: ${c.text}`);
+    });
+  }
+
+  document.getElementById('prompt-output').textContent = parts.join('\n');
+}
+
+function copyPrompt() {
+  const text = document.getElementById('prompt-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.querySelector('.copy-btn');
+    btn.textContent = 'Copied!';
+    setTimeout(() => btn.textContent = 'Copy', 1500);
+  });
+}
+
+// ============================================================
+// INTERACTIONS
+// ============================================================
+function selectPersona(id) {
+  state.persona = id;
+  const p = PERSONAS.find(x => x.id === id);
+  // Auto-select first platform
+  state.platform = p.platforms ? p.platforms[0] : 'web';
+  updateAll();
+}
+
+function selectSubRole(id) { state.staffRole = id; updateAll(); }
+function selectPlatform(id) { state.platform = id; updateAll(); }
+
+// ============================================================
+// VIEW SWITCHING
+// ============================================================
+let currentView = 'flows';
+
+function switchView(view) {
+  currentView = view;
+  document.querySelectorAll('.view-tab').forEach(t => t.classList.toggle('active', t.dataset.view === view));
+  document.querySelector('.main').style.display = view === 'rbac' ? 'flex' : 'none';
+  const flowsEl = document.getElementById('flows-view');
+  flowsEl.classList.toggle('visible', view === 'flows');
+  if (view === 'flows') renderFlowsView();
+}
+
+function renderFlowsView() {
+  const el = document.getElementById('flows-view');
+  const step = (num, label, detail, color, badge) => {
+    const badgeHtml = badge ? `<span class="step-badge" style="background:color-mix(in srgb,${color} 15%,var(--surface2));color:${color};border:1px solid color-mix(in srgb,${color} 30%,var(--border))">${badge}</span>` : '';
+    return `<div class="flow-step">
+      <div class="step-num" style="background:${color}">${num}</div>
+      <div class="step-content">
+        <div class="step-label">${label}</div>
+        <div class="step-detail">${detail}</div>
+        ${badgeHtml}
+      </div>
+    </div>`;
+  };
+  const decision = (text) => `<div class="flow-decision">${text}</div>`;
+
+  el.innerHTML = `
+    <div class="arch-note">
+      <div class="arch-note-title">How Navigation Works</div>
+      <div class="arch-note-text">
+        The mobile app uses <strong>conditional rendering</strong> to control which screens are visible. The root layout checks auth state and either shows the <strong>Login/Register screens</strong> (Auth group) or the <strong>main app screens</strong> (Tabs group). When you log in, switch businesses, or log out, the entire screen group swaps — there's no "back" button to accidentally reach a stale screen. The <strong>401 handler</strong> automatically clears your session if the server rejects your token. <strong>Network errors</strong> (WiFi down, server unreachable) preserve your session so you don't lose access.
+      </div>
+    </div>
+
+    <div class="flows-section">
+      <div class="flows-section-title">Login & Authentication Flows</div>
+      <div class="flows-grid">
+        <!-- Login: Single Vendor -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--vendor) 15%,var(--surface2));color:var(--vendor)">🔑</div>
+            <div>
+              <div class="flow-card-title">Login — Single Business</div>
+              <div class="flow-card-desc">Owner or staff with access to one business only</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Open App', 'App loads and checks for saved session in storage', '#6366f1')}
+            ${step(2, 'No Session Found', 'App shows the Login screen (Auth group)', '#6366f1')}
+            ${step(3, 'Enter Credentials', 'User types email + password, or taps Google/Apple sign-in', '#6366f1')}
+            ${step(4, 'Server Responds', 'Returns user profile + list of businesses (just 1)', '#8b5cf6')}
+            ${step(5, 'Auto-Select Business', 'App automatically picks the only business — no picker needed', '#8b5cf6', 'AUTO')}
+            ${step(6, 'Arrive at Dashboard', 'Screen swaps to main app. Back button does nothing (clean cut).', '#10b981', 'TABS GROUP')}
+          </div>
+        </div>
+
+        <!-- Login: Multi Vendor -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--staff) 15%,var(--surface2));color:var(--staff)">🏢</div>
+            <div>
+              <div class="flow-card-title">Login — Multiple Businesses</div>
+              <div class="flow-card-desc">Staff who works for 2+ businesses</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Open App', 'App loads and checks for saved session', '#6366f1')}
+            ${step(2, 'No Session Found', 'App shows the Login screen', '#6366f1')}
+            ${step(3, 'Enter Credentials', 'User logs in with email/password or social auth', '#6366f1')}
+            ${step(4, 'Server Responds', 'Returns user profile + list of businesses (2 or more)', '#3b82f6')}
+            ${step(5, 'Business Picker Shown', 'App navigates to the "Select a Business" screen. Each business shows name, role, and a card to tap.', '#f59e0b', 'PICKER')}
+            ${step(6, 'Tap a Business', 'User selects which business to work in. Their role & permissions are scoped to that business.', '#f59e0b')}
+            ${step(7, 'Arrive at Dashboard', 'Screen swaps to main app with that business\'s context. Back button does nothing.', '#10b981', 'TABS GROUP')}
+          </div>
+        </div>
+
+        <!-- Register -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--customer) 15%,var(--surface2));color:var(--customer)">✨</div>
+            <div>
+              <div class="flow-card-title">New User Registration</div>
+              <div class="flow-card-desc">Creating a new account from the mobile app</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Tap "Create Account"', 'From login screen, user navigates to the registration form', '#6366f1')}
+            ${step(2, 'Fill In Details', 'Name, email, password. Or tap Google/Apple for quick sign-up.', '#6366f1')}
+            ${step(3, 'Account Created', 'Server creates the user account and returns profile + business list', '#8b5cf6')}
+            ${step(4, 'Same Logic as Login', 'If 1 business → auto-select → dashboard. If multiple → business picker.', '#10b981', 'CONDITIONAL')}
+          </div>
+          ${decision('<strong>Note:</strong> New registrations may have 0 businesses if they haven\'t been invited yet. These users stay on the auth screen until a business owner invites them.')}
+        </div>
+
+        <!-- Session Recovery -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,#10b981 15%,var(--surface2));color:#10b981">🔄</div>
+            <div>
+              <div class="flow-card-title">App Reopen (Session Recovery)</div>
+              <div class="flow-card-desc">Returning to the app after closing it</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Open App', 'App loads and finds a saved token + user in storage', '#6366f1')}
+            ${step(2, 'Validate with Server', 'Calls GET /auth/me to check if the saved token is still valid', '#8b5cf6')}
+            ${step(3, 'Token Valid', 'Server confirms the session. App restores the saved business context.', '#10b981', 'RESTORED')}
+            ${step(4, 'Straight to Dashboard', 'User sees their dashboard immediately. No login required.', '#10b981', 'TABS GROUP')}
+          </div>
+          ${decision('<strong>If token is expired (401/403):</strong> App clears the session and shows the login screen.<br><br><strong>If network is down:</strong> App preserves the saved session and shows the dashboard using cached data. User can still browse but can\'t load new data.')}
+        </div>
+      </div>
+    </div>
+
+    <div class="flows-section">
+      <div class="flows-section-title">In-App Actions</div>
+      <div class="flows-grid">
+        <!-- Switch Business -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--guest) 15%,var(--surface2));color:var(--guest)">🔀</div>
+            <div>
+              <div class="flow-card-title">Switch Business</div>
+              <div class="flow-card-desc">Changing which business you're working in (multi-vendor staff)</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Go to Settings', 'User is on the main dashboard, navigates to the Settings tab', '#6366f1')}
+            ${step(2, 'Tap "Switch Business"', 'App clears the current business selection from storage', '#f59e0b')}
+            ${step(3, 'Screen Swaps to Picker', 'Because no business is selected, the root layout switches back to the Auth group and shows the vendor picker', '#f59e0b', 'AUTH GROUP')}
+            ${step(4, 'Select New Business', 'User taps on a different business. Permissions update to match that business\'s role.', '#10b981')}
+            ${step(5, 'Back to Dashboard', 'Screen swaps to the main app with the new business context. All data refreshes.', '#10b981', 'TABS GROUP')}
+          </div>
+          ${decision('<strong>Important:</strong> There is no "back" button to the old business\'s screens. The entire screen group is replaced — you cannot accidentally see stale data from the previous business.')}
+        </div>
+
+        <!-- Logout -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--superadmin) 15%,var(--surface2));color:var(--superadmin)">🚪</div>
+            <div>
+              <div class="flow-card-title">Sign Out</div>
+              <div class="flow-card-desc">Logging out and clearing the session</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Go to Settings', 'User navigates to the Settings tab', '#6366f1')}
+            ${step(2, 'Tap "Sign Out"', 'A confirmation dialog appears: "Are you sure?"', '#ef4444')}
+            ${step(3, 'Confirm', 'App tells the server to invalidate the session, then clears all local data (token, user, business selection)', '#ef4444')}
+            ${step(4, 'Login Screen Appears', 'Screen swaps to the Auth group. Back button does nothing — you cannot return to the dashboard.', '#ef4444', 'AUTH GROUP')}
+          </div>
+          ${decision('<strong>If server logout fails</strong> (e.g. network down): The app still clears local data and shows the login screen. The server token will expire on its own.')}
+        </div>
+
+        <!-- 401 Auto-Logout -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,#ef4444 15%,var(--surface2));color:#ef4444">🛡️</div>
+            <div>
+              <div class="flow-card-title">Automatic Session Expiry</div>
+              <div class="flow-card-desc">What happens when your session expires while using the app</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Using the App Normally', 'User is browsing bookings, events, etc.', '#6366f1')}
+            ${step(2, 'Server Rejects a Request', 'Any API call returns 401 (token expired or revoked by admin)', '#ef4444')}
+            ${step(3, 'Interceptor Catches It', 'The API layer automatically detects the 401 and clears all auth data', '#ef4444', 'AUTO')}
+            ${step(4, 'Login Screen Appears', 'Screen swaps to login. User must sign in again to continue.', '#ef4444', 'AUTH GROUP')}
+          </div>
+          ${decision('<strong>This is automatic</strong> — the user doesn\'t need to do anything. If an admin revokes access or the token expires, the app gracefully returns to the login screen.')}
+        </div>
+
+        <!-- Zero Memberships -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--text-muted) 15%,var(--surface2));color:var(--text-muted)">🚫</div>
+            <div>
+              <div class="flow-card-title">No Business Access</div>
+              <div class="flow-card-desc">User exists but hasn't been invited to any business</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'User Logs In', 'Credentials are correct, account exists', '#6366f1')}
+            ${step(2, 'No Businesses Found', 'Server returns an empty list of business memberships', '#f59e0b')}
+            ${step(3, 'Stays on Auth Screen', 'The app detects 0 memberships and keeps the user in the Auth group', '#ef4444', 'BLOCKED')}
+          </div>
+          ${decision('<strong>Resolution:</strong> A business owner must invite this user to their business. Once invited, the user can log in again and will see the business in their list.')}
+        </div>
+      </div>
+    </div>
+
+    <div class="flows-section">
+      <div class="flows-section-title">Booking & Customer Flows</div>
+      <div class="flows-grid">
+        <!-- Booking Flow (Portal) -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--customer) 15%,var(--surface2));color:var(--customer)">🔗</div>
+            <div>
+              <div class="flow-card-title">Customer Portal (No Login)</div>
+              <div class="flow-card-desc">Accessing booking details via a link — no account needed</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Receive Link', 'Customer gets an SMS or email with a unique booking link', '#10b981')}
+            ${step(2, 'Open Link', 'Opens in browser — no app download or account required', '#10b981')}
+            ${step(3, 'Token Validated', 'The link contains a secure token that grants access to this specific booking only', '#10b981', 'SCOPED')}
+            ${step(4, 'View & Interact', 'Customer can view booking details, pay balance, sign contract, choose template, view gallery', '#10b981')}
+          </div>
+          ${decision('<strong>Security:</strong> Portal tokens are booking-scoped. Each token only grants access to one specific booking. Tokens can be revoked by the business owner.')}
+        </div>
+
+        <!-- Event Guest -->
+        <div class="flow-card">
+          <div class="flow-card-header">
+            <div class="flow-card-icon" style="background:color-mix(in srgb,var(--guest) 15%,var(--surface2));color:var(--guest)">📸</div>
+            <div>
+              <div class="flow-card-title">Event Guest (Photo Booth)</div>
+              <div class="flow-card-desc">Guest at an event using the photo booth — zero authentication</div>
+            </div>
+          </div>
+          <div class="flow-steps">
+            ${step(1, 'Staff Sets Up Booth', 'The booth attendant enters "Event Lock Mode" on their iPad', '#3b82f6')}
+            ${step(2, 'iPad Locked to Capture', 'The device shows only the photo booth interface — no navigation to other app sections', '#f59e0b', 'LOCKED')}
+            ${step(3, 'Guest Taps "Start"', 'No login, no account — guest just taps the screen to begin', '#f59e0b')}
+            ${step(4, 'Take Photos', 'Camera captures photos, GIFs, videos, or burst shots', '#f59e0b')}
+            ${step(5, 'Customize', 'Guest applies filters, digital props, overlays', '#f59e0b')}
+            ${step(6, 'Print & Share', 'Photos print instantly and/or share via QR code, SMS, email, AirDrop', '#10b981', 'DELIVERED')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function updateAll() {
+  renderPersonas();
+  renderSubRoles();
+  renderPlatformToggle();
+  renderDetails();
+  renderFlow();
+  updatePrompt();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeModal();
+  if (e.key === 'Enter' && e.metaKey && document.getElementById('modal-overlay').classList.contains('open')) saveComment();
+});
+
+updateAll();
+switchView('flows');
+</script>
+</body>
+</html>
